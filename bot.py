@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-DavxTV Telegram Bot  v2.0
-- Til DB da saqlanadi (restart da ham esda qoladi)
-- Barqaror ishlaydi
-- Kino qo'shish oson
+╔══════════════════════════════════╗
+║       DavxTV Bot  v3.0          ║
+║  Mukammal • Qulay • Barqaror    ║
+╚══════════════════════════════════╝
 """
 
 import logging
+import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
@@ -21,117 +22,157 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ═══════════════════════════════════════════
+# ═══════════════════════════════════════════════════
 BOT_TOKEN = "8635105226:AAGbibuBkOF_Me9ZW7GJmyhp78VILO2L1Cg"
 ADMIN_IDS = [440715427]
-# ═══════════════════════════════════════════
+# ═══════════════════════════════════════════════════
 
-db = Database("davxtv.db")
+# DB ni /app/data/ da saqlash (Railway Volume)
+os.makedirs("/app/data", exist_ok=True)
+db = Database("/app/data/davxtv.db")
+
+# Boshlang'ich kanal — DB ga qo'shiladi
+DEFAULT_CHANNEL = "@davxtv"
+if not db.get_channels():
+    db.add_channel(DEFAULT_CHANNEL, "DavxTV")
 
 # ──────────────────────────────────────────
 #  MATNLAR (3 til)
 # ──────────────────────────────────────────
 T = {
     "uz": {
-        "select_lang": "🌐 Tilni tanlang:",
-        "lang_set":    "✅ Til: O'zbekcha 🇺🇿",
-        "welcome":     "👋 Salom <b>{n}</b>! DavxTV ga xush kelibsiz 🎬\n\n📌 Kino <b>kodini</b> yuboring.\nMasalan: <code>UZ001</code>\n\n/list — barcha kinolar\n/new  — yangi kinolar\n/lang — tilni o'zgartirish",
-        "enter_code":  "🔑 Kino kodini yuboring (masalan: <code>UZ001</code>):",
-        "not_found":   "❌ <b>{c}</b> — bunday kod topilmadi.\n\n📋 Barcha kodlar: /list",
-        "cat":         "📁 Kategoriya",
-        "genre":       "⭐ Janr",
-        "year":        "🗓 Yil",
-        "lang_f":      "🌐 Til",
-        "views":       "👁 Ko'rishlar",
-        "code_l":      "🔑 Kod",
-        "another":     "🔄 Boshqa kino",
-        "no_films":    "📭 Hozircha kinolar yo'q.",
-        "all_films":   "📋 <b>Barcha kinolar:</b>",
-        "new_films":   "🆕 <b>Yangi kinolar:</b>",
-        "no_cat":      "📭 Bu kategoriyada kino yo'q.",
-        "see_code":    "👆 Kodini yuboring → film ko'ring!",
-        "about":       "ℹ️ <b>DavxTV</b> — kino kodi yuboring, to'liq film oling! 🎬\n\nAdmin: @davxtv_admin",
-        "no_right":    "❌ Admin huquqi yo'q.",
-        "choose_cat":  "📋 Kategoriyani tanlang:",
+        "choose_lang":  "🌐 Assalomu alaykum!\nTilni tanlang:",
+        "lang_set":     "✅ O'zbekcha tanlandi!",
+        "sub_required": (
+            "📢 <b>Kanalga a'zo bo'ling!</b>\n\n"
+            "Kinolarni ko'rish uchun quyidagi kanalga\n"
+            "a'zo bo'lishingiz kerak 👇"
+        ),
+        "sub_done":     "✅ Rahmat! Endi kino kodini yuboring 🎬",
+        "sub_fail":     "❌ Siz hali a'zo bo'lmadingiz!\nIltimos kanalga a'zo bo'ling 👇",
+        "welcome": (
+            "👋 Salom <b>{n}</b>!\n\n"
+            "🎬 <b>DavxTV</b> ga xush kelibsiz!\n\n"
+            "📌 Kino <b>kodini</b> yuboring → film tomosha qiling\n\n"
+            "📋 /list — barcha kinolar\n"
+            "🆕 /new  — yangi kinolar"
+        ),
+        "enter_code":   "🔑 Kino kodini yuboring:",
+        "not_found":    "❌ <b>{c}</b> — bu kod topilmadi.\n\n📋 Barcha kodlar: /list",
+        "cat":          "📁 Tur",
+        "genre":        "⭐ Janr",
+        "year":         "🗓 Yil",
+        "lang_f":       "🌐 Til",
+        "views":        "👁 Ko'rishlar",
+        "code_l":       "🔑 Kod",
+        "another":      "🔄 Boshqa kino",
+        "no_films":     "📭 Hozircha kinolar yo'q.",
+        "all_films":    "📋 <b>Barcha kinolar:</b>",
+        "new_films":    "🆕 <b>Yangi kinolar:</b>",
+        "no_cat":       "📭 Bu turda kino yo'q.",
+        "see_code":     "👆 Kodini yuboring → film tomosha qiling!",
+        "no_right":     "❌ Admin huquqi yo'q.",
         "help": (
-            "📖 <b>Yordam:</b>\n\n"
-            "🔹 Kod yuboring → film yuklanadi\n"
-            "🔹 /list — barcha kinolar\n"
-            "🔹 /new  — yangi kinolar\n"
-            "🔹 /lang — tilni o'zgartirish\n\n"
-            "📌 Kod formati:\n"
+            "📖 <b>Yordam</b>\n\n"
+            "🔹 Kino kodini yuboring → film yuklanadi\n\n"
+            "📌 <b>Kod formati:</b>\n"
             "   <code>UZ001</code> — O'zbek kino\n"
             "   <code>TR001</code> — Turk serial\n"
             "   <code>HN001</code> — Hind kino\n"
-            "   <code>XR001</code> — Xorij kino"
+            "   <code>XR001</code> — Xorij kino\n\n"
+            "📋 /list — barcha kinolar\n"
+            "🆕 /new  — yangi kinolar\n"
+            "🌐 /lang — tilni o'zgartirish"
         ),
     },
     "ru": {
-        "select_lang": "🌐 Выберите язык:",
-        "lang_set":    "✅ Язык: Русский 🇷🇺",
-        "welcome":     "👋 Привет <b>{n}</b>! Добро пожаловать в DavxTV 🎬\n\n📌 Отправьте <b>код</b> фильма.\nНапример: <code>UZ001</code>\n\n/list — все фильмы\n/new  — новые фильмы\n/lang — сменить язык",
-        "enter_code":  "🔑 Отправьте код фильма (например: <code>UZ001</code>):",
-        "not_found":   "❌ <b>{c}</b> — такой код не найден.\n\n📋 Все коды: /list",
-        "cat":         "📁 Категория",
-        "genre":       "⭐ Жанр",
-        "year":        "🗓 Год",
-        "lang_f":      "🌐 Язык",
-        "views":       "👁 Просмотры",
-        "code_l":      "🔑 Код",
-        "another":     "🔄 Другой фильм",
-        "no_films":    "📭 Фильмов пока нет.",
-        "all_films":   "📋 <b>Все фильмы:</b>",
-        "new_films":   "🆕 <b>Новые фильмы:</b>",
-        "no_cat":      "📭 В этой категории нет фильмов.",
-        "see_code":    "👆 Отправьте код → смотрите фильм!",
-        "about":       "ℹ️ <b>DavxTV</b> — отправьте код, получите фильм! 🎬\n\nAdmin: @davxtv_admin",
-        "no_right":    "❌ Нет прав администратора.",
-        "choose_cat":  "📋 Выберите категорию:",
+        "choose_lang":  "🌐 Добро пожаловать!\nВыберите язык:",
+        "lang_set":     "✅ Русский язык выбран!",
+        "sub_required": (
+            "📢 <b>Подпишитесь на канал!</b>\n\n"
+            "Для просмотра фильмов необходимо\n"
+            "подписаться на наш канал 👇"
+        ),
+        "sub_done":     "✅ Спасибо! Теперь отправьте код фильма 🎬",
+        "sub_fail":     "❌ Вы ещё не подписались!\nПожалуйста подпишитесь на канал 👇",
+        "welcome": (
+            "👋 Привет <b>{n}</b>!\n\n"
+            "🎬 Добро пожаловать в <b>DavxTV</b>!\n\n"
+            "📌 Отправьте <b>код</b> фильма → смотрите кино\n\n"
+            "📋 /list — все фильмы\n"
+            "🆕 /new  — новые фильмы"
+        ),
+        "enter_code":   "🔑 Отправьте код фильма:",
+        "not_found":    "❌ <b>{c}</b> — такой код не найден.\n\n📋 Все коды: /list",
+        "cat":          "📁 Категория",
+        "genre":        "⭐ Жанр",
+        "year":         "🗓 Год",
+        "lang_f":       "🌐 Язык",
+        "views":        "👁 Просмотры",
+        "code_l":       "🔑 Код",
+        "another":      "🔄 Другой фильм",
+        "no_films":     "📭 Фильмов пока нет.",
+        "all_films":    "📋 <b>Все фильмы:</b>",
+        "new_films":    "🆕 <b>Новые фильмы:</b>",
+        "no_cat":       "📭 В этой категории нет фильмов.",
+        "see_code":     "👆 Отправьте код → смотрите фильм!",
+        "no_right":     "❌ Нет прав администратора.",
         "help": (
-            "📖 <b>Помощь:</b>\n\n"
-            "🔹 Код → фильм загружается\n"
-            "🔹 /list — все фильмы\n"
-            "🔹 /new  — новые фильмы\n"
-            "🔹 /lang — сменить язык\n\n"
-            "📌 Формат кода:\n"
+            "📖 <b>Помощь</b>\n\n"
+            "🔹 Отправьте код → фильм загрузится\n\n"
+            "📌 <b>Формат кода:</b>\n"
             "   <code>UZ001</code> — Узбекский\n"
             "   <code>TR001</code> — Турецкий\n"
             "   <code>HN001</code> — Индийский\n"
-            "   <code>XR001</code> — Зарубежный"
+            "   <code>XR001</code> — Зарубежный\n\n"
+            "📋 /list — все фильмы\n"
+            "🆕 /new  — новые фильмы\n"
+            "🌐 /lang — сменить язык"
         ),
     },
     "en": {
-        "select_lang": "🌐 Choose language:",
-        "lang_set":    "✅ Language: English 🇬🇧",
-        "welcome":     "👋 Hello <b>{n}</b>! Welcome to DavxTV 🎬\n\n📌 Send the movie <b>code</b>.\nExample: <code>UZ001</code>\n\n/list — all movies\n/new  — new movies\n/lang — change language",
-        "enter_code":  "🔑 Send movie code (e.g. <code>UZ001</code>):",
-        "not_found":   "❌ <b>{c}</b> — code not found.\n\n📋 All codes: /list",
-        "cat":         "📁 Category",
-        "genre":       "⭐ Genre",
-        "year":        "🗓 Year",
-        "lang_f":      "🌐 Language",
-        "views":       "👁 Views",
-        "code_l":      "🔑 Code",
-        "another":     "🔄 Another movie",
-        "no_films":    "📭 No movies yet.",
-        "all_films":   "📋 <b>All movies:</b>",
-        "new_films":   "🆕 <b>New movies:</b>",
-        "no_cat":      "📭 No movies in this category.",
-        "see_code":    "👆 Send code → watch movie!",
-        "about":       "ℹ️ <b>DavxTV</b> — send code, get full movie! 🎬\n\nAdmin: @davxtv_admin",
-        "no_right":    "❌ No admin rights.",
-        "choose_cat":  "📋 Choose category:",
+        "choose_lang":  "🌐 Welcome!\nChoose language:",
+        "lang_set":     "✅ English selected!",
+        "sub_required": (
+            "📢 <b>Subscribe to our channel!</b>\n\n"
+            "To watch movies you need to\n"
+            "subscribe to our channel 👇"
+        ),
+        "sub_done":     "✅ Thank you! Now send the movie code 🎬",
+        "sub_fail":     "❌ You haven't subscribed yet!\nPlease subscribe to the channel 👇",
+        "welcome": (
+            "👋 Hello <b>{n}</b>!\n\n"
+            "🎬 Welcome to <b>DavxTV</b>!\n\n"
+            "📌 Send the movie <b>code</b> → watch movies\n\n"
+            "📋 /list — all movies\n"
+            "🆕 /new  — new movies"
+        ),
+        "enter_code":   "🔑 Send movie code:",
+        "not_found":    "❌ <b>{c}</b> — code not found.\n\n📋 All codes: /list",
+        "cat":          "📁 Category",
+        "genre":        "⭐ Genre",
+        "year":         "🗓 Year",
+        "lang_f":       "🌐 Language",
+        "views":        "👁 Views",
+        "code_l":       "🔑 Code",
+        "another":      "🔄 Another movie",
+        "no_films":     "📭 No movies yet.",
+        "all_films":    "📋 <b>All movies:</b>",
+        "new_films":    "🆕 <b>New movies:</b>",
+        "no_cat":       "📭 No movies in this category.",
+        "see_code":     "👆 Send code → watch movie!",
+        "no_right":     "❌ No admin rights.",
         "help": (
-            "📖 <b>Help:</b>\n\n"
-            "🔹 Send code → movie loads\n"
-            "🔹 /list — all movies\n"
-            "🔹 /new  — new movies\n"
-            "🔹 /lang — change language\n\n"
-            "📌 Code format:\n"
+            "📖 <b>Help</b>\n\n"
+            "🔹 Send code → movie loads\n\n"
+            "📌 <b>Code format:</b>\n"
             "   <code>UZ001</code> — Uzbek\n"
             "   <code>TR001</code> — Turkish\n"
             "   <code>HN001</code> — Indian\n"
-            "   <code>XR001</code> — Foreign"
+            "   <code>XR001</code> — Foreign\n\n"
+            "📋 /list — all movies\n"
+            "🆕 /new  — new movies\n"
+            "🌐 /lang — change language"
         ),
     },
 }
@@ -146,39 +187,52 @@ CATS = {
 #  YORDAMCHI FUNKSIYALAR
 # ──────────────────────────────────────────
 def get_lang(uid):
-    """DB dan tilni oladi. Agar yo'q bo'lsa None qaytaradi."""
     return db.get_user_lang(uid)
 
 def tx(uid, key, **kw):
-    """Foydalanuvchi tilidagi matn."""
     lang = get_lang(uid) or "uz"
     text = T[lang].get(key, T["uz"].get(key, ""))
     return text.format(**kw) if kw else text
 
 def lang_kb():
     return InlineKeyboardMarkup([[
-        InlineKeyboardButton("🇺🇿 O'zbekcha", callback_data="lang_uz"),
-        InlineKeyboardButton("🇷🇺 Русский",   callback_data="lang_ru"),
-        InlineKeyboardButton("🇬🇧 English",   callback_data="lang_en"),
+        InlineKeyboardButton("🇺🇿 O'zbek", callback_data="lang_uz"),
+        InlineKeyboardButton("🇷🇺 Русский", callback_data="lang_ru"),
+        InlineKeyboardButton("🇬🇧 English", callback_data="lang_en"),
     ]])
 
-def main_kb(uid):
-    lang = get_lang(uid) or "uz"
-    cl   = CATS[lang]
-    return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton(cl["UZ"], callback_data="cat_UZ"),
-            InlineKeyboardButton(cl["TR"], callback_data="cat_TR"),
-        ],
-        [
-            InlineKeyboardButton(cl["HN"], callback_data="cat_HN"),
-            InlineKeyboardButton(cl["XR"], callback_data="cat_XR"),
-        ],
-        [
-            InlineKeyboardButton("ℹ️ Haqida", callback_data="about"),
-            InlineKeyboardButton("🌐 Til",    callback_data="change_lang"),
-        ],
-    ])
+# ──────────────────────────────────────────
+#  KANAL TEKSHIRUVI
+# ──────────────────────────────────────────
+async def is_subscribed(uid: int, ctx: ContextTypes.DEFAULT_TYPE) -> bool:
+    channels = db.get_channels()
+    if not channels:
+        return True
+    for ch in channels:
+        try:
+            member = await ctx.bot.get_chat_member(chat_id=ch["username"], user_id=uid)
+            if member.status not in ["member", "administrator", "creator"]:
+                return False
+        except Exception:
+            pass
+    return True
+
+async def send_sub_keyboard(update_or_query, lang: str, is_callback=False):
+    channels = db.get_channels()
+    buttons  = []
+    for ch in channels:
+        name = ch["title"] or ch["username"]
+        buttons.append([InlineKeyboardButton(
+            f"📢 {name}", url=f"https://t.me/{ch['username'].lstrip('@')}"
+        )])
+    buttons.append([InlineKeyboardButton("✅ A'zo bo'ldim / Подписался / Subscribed", callback_data="check_sub")])
+    kb   = InlineKeyboardMarkup(buttons)
+    text = T[lang]["sub_required"]
+
+    if is_callback:
+        await update_or_query.message.reply_text(text, parse_mode="HTML", reply_markup=kb)
+    else:
+        await update_or_query.message.reply_text(text, parse_mode="HTML", reply_markup=kb)
 
 # ──────────────────────────────────────────
 #  /start
@@ -186,20 +240,23 @@ def main_kb(uid):
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     db.add_user(user.id, user.username or "", user.first_name or "")
-
     lang = get_lang(user.id)
+
     if lang is None:
-        # Birinchi marta: til tanlash
         await update.message.reply_text(
-            "🌐 Tilni tanlang / Выберите язык / Choose language:",
+            T["uz"]["choose_lang"],
             reply_markup=lang_kb(),
         )
-    else:
-        await update.message.reply_text(
-            tx(user.id, "welcome", n=user.first_name),
-            parse_mode="HTML",
-            reply_markup=main_kb(user.id),
-        )
+        return
+
+    if not await is_subscribed(user.id, ctx):
+        await send_sub_keyboard(update, lang)
+        return
+
+    await update.message.reply_text(
+        tx(user.id, "welcome", n=user.first_name),
+        parse_mode="HTML",
+    )
 
 # ──────────────────────────────────────────
 #  /lang
@@ -214,10 +271,7 @@ async def lang_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 #  /help
 # ──────────────────────────────────────────
 async def help_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        tx(update.effective_user.id, "help"),
-        parse_mode="HTML",
-    )
+    await update.message.reply_text(tx(update.effective_user.id, "help"), parse_mode="HTML")
 
 # ──────────────────────────────────────────
 #  /list
@@ -256,47 +310,20 @@ async def new_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 # ──────────────────────────────────────────
-#  KANAL TEKSHIRUVI
-# ──────────────────────────────────────────
-CHANNEL = "@davxtv"
-
-async def is_subscribed(uid: int, ctx: ContextTypes.DEFAULT_TYPE) -> bool:
-    try:
-        member = await ctx.bot.get_chat_member(chat_id=CHANNEL, user_id=uid)
-        return member.status in ["member", "administrator", "creator"]
-    except Exception:
-        return False
-
-async def send_sub_msg(update: Update, lang: str):
-    msgs = {
-        "uz": "📢 Kinolarni ko'rish uchun kanalimizga a'zo bo'ling!",
-        "ru": "📢 Подпишитесь на наш канал чтобы смотреть фильмы!",
-        "en": "📢 Subscribe to our channel to watch movies!",
-    }
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📢 Kanalga o'tish", url=f"https://t.me/davxtv")],
-        [InlineKeyboardButton("✅ A'zo bo'ldim", callback_data="check_sub")],
-    ])
-    await update.message.reply_text(msgs.get(lang, msgs["uz"]), reply_markup=kb)
-
-# ──────────────────────────────────────────
 #  KOD YOZILGANDA → FILM
 # ──────────────────────────────────────────
 async def handle_code(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     uid  = update.effective_user.id
     lang = get_lang(uid)
 
-    # Til tanlanmagan
     if lang is None:
         await update.message.reply_text(
-            "🌐 Tilni tanlang / Выберите язык / Choose language:",
-            reply_markup=lang_kb(),
+            T["uz"]["choose_lang"], reply_markup=lang_kb()
         )
         return
 
-    # Kanal tekshiruvi
     if not await is_subscribed(uid, ctx):
-        await send_sub_msg(update, lang)
+        await send_sub_keyboard(update, lang)
         return
 
     raw   = update.message.text.strip().upper()
@@ -307,7 +334,7 @@ async def handle_code(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
 
     db.inc_views(movie["code"])
-    cl = CATS[lang]
+    cl = CATS[get_lang(uid) or "uz"]
 
     caption = (
         f"🎬 <b>{movie['title']}</b>\n\n"
@@ -329,104 +356,126 @@ async def handle_code(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     )
 
 # ──────────────────────────────────────────
+#  VIDEO → FILE_ID (Admin)
+# ──────────────────────────────────────────
+async def get_file_id(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    if uid not in ADMIN_IDS:
+        return
+    if update.message.video:
+        fid = update.message.video.file_id
+    elif update.message.document:
+        fid = update.message.document.file_id
+    else:
+        await update.message.reply_text("❌ Video yuboring!")
+        return
+    await update.message.reply_text(
+        f"✅ <b>file_id:</b>\n<code>{fid}</code>\n\n"
+        f"📝 Kino qo'shish:\n"
+        f"<code>/add KOD | Nomi | UZ | Janr | Yil | Til | {fid}</code>",
+        parse_mode="HTML",
+    )
+
+# ──────────────────────────────────────────
 #  CALLBACK
 # ──────────────────────────────────────────
 async def cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q    = update.callback_query
     data = q.data
     uid  = q.from_user.id
+    lang = get_lang(uid) or "uz"
     await q.answer()
 
-    # A'ZO BO'LDIM TUGMASI
-    if data == "check_sub":
-        lang = get_lang(uid) or "uz"
-        if await is_subscribed(uid, ctx):
-            msgs = {
-                "uz": "✅ Rahmat! Endi kino kodini yuboring:",
-                "ru": "✅ Спасибо! Теперь отправьте код фильма:",
-                "en": "✅ Thanks! Now send the movie code:",
-            }
-            await q.message.reply_text(msgs.get(lang, msgs["uz"]), parse_mode="HTML")
-        else:
-            msgs = {
-                "uz": "❌ Siz hali kanalga a'zo bo'lmadingiz!",
-                "ru": "❌ Вы ещё не подписались на канал!",
-                "en": "❌ You haven't subscribed yet!",
-            }
-            kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("📢 Kanalga o'tish", url="https://t.me/davxtv")],
-                [InlineKeyboardButton("✅ A'zo bo'ldim", callback_data="check_sub")],
-            ])
-            await q.message.reply_text(msgs.get(lang, msgs["uz"]), reply_markup=kb)
-        return
-
-    # TIL TANLASH
+    # ── TIL TANLASH ──────────────────────────────────────────────────────
     if data.startswith("lang_"):
-        new_lang = data[5:]             # uz / ru / en
+        new_lang = data[5:]
         db.set_user_lang(uid, new_lang)
+
+        if not await is_subscribed(uid, ctx):
+            await q.message.reply_text(T[new_lang]["lang_set"])
+            await send_sub_keyboard(q, new_lang, is_callback=True)
+            return
+
+        user = q.from_user
+        await q.message.reply_text(T[new_lang]["lang_set"])
         await q.message.reply_text(
-            T[new_lang]["lang_set"] + "\n\n" + T[new_lang]["enter_code"],
+            T[new_lang]["welcome"].format(n=user.first_name),
             parse_mode="HTML",
         )
         return
 
-    # TIL O'ZGARTIRISH
-    if data == "change_lang":
-        await q.message.reply_text(
-            "🌐 Tilni tanlang / Выберите язык / Choose language:",
-            reply_markup=lang_kb(),
-        )
+    # ── KANAL TEKSHIRUVI ─────────────────────────────────────────────────
+    if data == "check_sub":
+        if await is_subscribed(uid, ctx):
+            user = q.from_user
+            await q.message.reply_text(T[lang]["sub_done"])
+            await q.message.reply_text(
+                T[lang]["welcome"].format(n=user.first_name),
+                parse_mode="HTML",
+            )
+        else:
+            channels = db.get_channels()
+            buttons  = []
+            for ch in channels:
+                name = ch["title"] or ch["username"]
+                buttons.append([InlineKeyboardButton(
+                    f"📢 {name}", url=f"https://t.me/{ch['username'].lstrip('@')}"
+                )])
+            buttons.append([InlineKeyboardButton(
+                "✅ A'zo bo'ldim / Подписался / Subscribed", callback_data="check_sub"
+            )])
+            await q.message.reply_text(
+                T[lang]["sub_fail"],
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(buttons),
+            )
         return
 
-    # KOD SO'RASH
+    # ── KOD SO'RASH ──────────────────────────────────────────────────────
     if data == "ask_code":
-        await q.message.reply_text(tx(uid, "enter_code"), parse_mode="HTML")
+        await q.message.reply_text(T[lang]["enter_code"])
         return
 
-    # HAQIDA
-    if data == "about":
-        await q.message.reply_text(tx(uid, "about"), parse_mode="HTML")
-        return
-
-    # KATEGORIYA
-    if data.startswith("cat_"):
-        cat    = data[4:]
-        movies = db.get_by_category(cat)
-        lang   = get_lang(uid) or "uz"
-        cl     = CATS[lang]
-        if not movies:
-            await q.message.reply_text(tx(uid, "no_cat"))
-            return
-        lines = [f"📋 <b>{cl.get(cat, cat)}:</b>\n"]
-        for m in movies:
-            lines.append(f"📽 <code>{m['code']}</code> — {m['title']}")
-        lines.append(f"\n{tx(uid, 'see_code')}")
-        await q.message.reply_text("\n".join(lines), parse_mode="HTML")
-        return
-
-    # ADMIN CALLBACKLAR
+    # ── ADMIN CALLBACKLAR ────────────────────────────────────────────────
     if data.startswith("adm_") and uid in ADMIN_IDS:
         if data == "adm_stat":
             s = db.stats()
             await q.message.reply_text(
-                f"📊 Foydalanuvchilar: {s['users']}\n"
-                f"🎬 Kinolar: {s['movies']}\n"
-                f"👁 Ko'rishlar: {s['views']}"
+                f"📊 <b>Statistika</b>\n\n"
+                f"👥 Foydalanuvchilar: <b>{s['users']}</b>\n"
+                f"🎬 Kinolar: <b>{s['movies']}</b>\n"
+                f"👁 Ko'rishlar: <b>{s['views']}</b>\n\n"
+                f"🏆 <b>Top 5:</b>\n" +
+                "\n".join(f"  • <code>{m['code']}</code> {m['title']} — {m['views']} 👁" for m in s["top"]),
+                parse_mode="HTML",
             )
         elif data == "adm_users":
-            await q.message.reply_text(f"👥 Jami: {len(db.get_all_users())} ta foydalanuvchi")
+            await q.message.reply_text(f"👥 Jami: <b>{len(db.get_all_users())}</b> ta foydalanuvchi", parse_mode="HTML")
+        elif data == "adm_channels":
+            channels = db.get_channels()
+            if channels:
+                text = "📢 <b>Kanallar:</b>\n\n" + "\n".join(
+                    f"  • {ch['username']} — {ch['title']}" for ch in channels
+                )
+            else:
+                text = "📭 Kanallar yo'q."
+            text += "\n\n➕ Kanal qo'shish: <code>/addch @username Kanal nomi</code>"
+            text += "\n🗑 O'chirish: <code>/rmch @username</code>"
+            await q.message.reply_text(text, parse_mode="HTML")
         elif data == "adm_add":
             await q.message.reply_text(
-                "➕ Kino qo'shish:\n\n"
-                "<code>/add KOD | Nomi | Kategoriya | Janr | Yil | Til | file_id</code>\n\n"
-                "Misol:\n"
+                "➕ <b>Kino qo'shish:</b>\n\n"
+                "Botga video yuboring → file_id oling\n"
+                "Keyin:\n"
+                "<code>/add KOD | Nomi | Tur | Janr | Yil | Til | file_id</code>\n\n"
+                "<b>Turlar:</b> UZ | TR | HN | XR\n\n"
+                "<b>Misol:</b>\n"
                 "<code>/add UZ001 | Alpomish | UZ | Drama | 2023 | O'zbek | AgACAgIA...</code>",
                 parse_mode="HTML",
             )
         elif data == "adm_del":
-            await q.message.reply_text(
-                "🗑 Kino o'chirish:\n<code>/del KOD</code>", parse_mode="HTML"
-            )
+            await q.message.reply_text("🗑 <code>/del KOD</code>", parse_mode="HTML")
+        return
 
 # ──────────────────────────────────────────
 #  ADMIN /admin
@@ -436,13 +485,28 @@ async def admin_panel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if uid not in ADMIN_IDS:
         await update.message.reply_text(tx(uid, "no_right"))
         return
+    s  = db.stats()
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("➕ Kino qo'shish",   callback_data="adm_add")],
-        [InlineKeyboardButton("🗑 Kino o'chirish",  callback_data="adm_del")],
-        [InlineKeyboardButton("📊 Statistika",       callback_data="adm_stat")],
-        [InlineKeyboardButton("👥 Foydalanuvchilar", callback_data="adm_users")],
+        [
+            InlineKeyboardButton("➕ Kino qo'sh", callback_data="adm_add"),
+            InlineKeyboardButton("🗑 Kino o'chir", callback_data="adm_del"),
+        ],
+        [
+            InlineKeyboardButton("📊 Statistika", callback_data="adm_stat"),
+            InlineKeyboardButton("👥 Foydalanuvchilar", callback_data="adm_users"),
+        ],
+        [
+            InlineKeyboardButton("📢 Kanallar", callback_data="adm_channels"),
+        ],
     ])
-    await update.message.reply_text("🛠 <b>Admin Panel</b>", parse_mode="HTML", reply_markup=kb)
+    await update.message.reply_text(
+        f"🛠 <b>Admin Panel</b>\n\n"
+        f"👥 {s['users']} foydalanuvchi\n"
+        f"🎬 {s['movies']} kino\n"
+        f"👁 {s['views']} ko'rish",
+        parse_mode="HTML",
+        reply_markup=kb,
+    )
 
 # ──────────────────────────────────────────
 #  ADMIN /add
@@ -451,51 +515,41 @@ async def add_movie(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     if uid not in ADMIN_IDS:
         return
-
     if not ctx.args:
         await update.message.reply_text(
             "📝 <b>Format:</b>\n"
-            "<code>/add KOD | Nomi | Kategoriya | Janr | Yil | Til | file_id</code>\n\n"
-            "<b>Kategoriyalar:</b> UZ | TR | HN | XR\n\n"
+            "<code>/add KOD | Nomi | Tur | Janr | Yil | Til | file_id</code>\n\n"
+            "<b>Turlar:</b> UZ | TR | HN | XR\n\n"
             "<b>Misol:</b>\n"
-            "<code>/add UZ001 | Alpomish | UZ | Drama | 2023 | O'zbek | AgACAgIA...</code>\n\n"
-            "❗ file_id ni olish uchun: botga video yuboring → /getid yozing",
+            "<code>/add UZ001 | Alpomish | UZ | Drama | 2023 | O'zbek | AgACAgIA...</code>",
             parse_mode="HTML",
         )
         return
-
-    raw   = " ".join(ctx.args)
-    parts = [p.strip() for p in raw.split("|")]
-
+    parts = [p.strip() for p in " ".join(ctx.args).split("|")]
     if len(parts) != 7:
         await update.message.reply_text(
             f"❌ {len(parts)} ta qism topildi, 7 ta kerak!\n"
-            "Har birini | bilan ajrating.\n\n"
-            "Format: <code>KOD | Nomi | Kategoriya | Janr | Yil | Til | file_id</code>",
+            "Har birini <b>|</b> bilan ajrating.",
             parse_mode="HTML",
         )
         return
-
     code, title, cat, genre, year, lang_f, file_id = parts
     cat = cat.upper()
-
     if cat not in ["UZ", "TR", "HN", "XR"]:
-        await update.message.reply_text("❌ Kategoriya: UZ, TR, HN yoki XR bo'lishi kerak.")
+        await update.message.reply_text("❌ Tur: UZ, TR, HN yoki XR bo'lishi kerak.")
         return
-
     ok = db.add_movie(code, title, cat, genre, year, lang_f, file_id)
     if ok:
         await update.message.reply_text(
-            f"✅ Kino qo'shildi!\n\n"
-            f"🎬 <b>{title}</b>\n"
+            f"✅ <b>Qo'shildi!</b>\n\n"
+            f"🎬 {title}\n"
             f"🔑 Kod: <code>{code.upper()}</code>\n"
-            f"📁 Kategoriya: {cat}",
+            f"📁 Tur: {cat}",
             parse_mode="HTML",
         )
     else:
         await update.message.reply_text(
-            f"❌ <code>{code.upper()}</code> kodi allaqachon mavjud!",
-            parse_mode="HTML",
+            f"❌ <code>{code.upper()}</code> kodi allaqachon mavjud!", parse_mode="HTML"
         )
 
 # ──────────────────────────────────────────
@@ -509,8 +563,7 @@ async def del_movie(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Format: <code>/del KOD</code>", parse_mode="HTML")
         return
     code = ctx.args[0].upper()
-    ok   = db.delete_movie(code)
-    if ok:
+    if db.delete_movie(code):
         await update.message.reply_text(f"🗑 <code>{code}</code> o'chirildi.", parse_mode="HTML")
     else:
         await update.message.reply_text(f"❌ <code>{code}</code> topilmadi.", parse_mode="HTML")
@@ -556,30 +609,48 @@ async def broadcast(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             failed += 1
         if (i + 1) % 20 == 0:
             await sm.edit_text(f"📤 {i+1}/{len(users)}")
-    await sm.edit_text(f"✅ Yuborildi: {sent}\n❌ Xato: {failed}\n👥 Jami: {len(users)}")
+    await sm.edit_text(
+        f"✅ Yuborildi: {sent}\n❌ Xato: {failed}\n👥 Jami: {len(users)}"
+    )
 
 # ──────────────────────────────────────────
-#  ADMIN /getid  — video file_id olish
+#  ADMIN /addch — kanal qo'shish
 # ──────────────────────────────────────────
-async def get_file_id(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Botga video yuborganda file_id olish uchun"""
+async def add_channel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     if uid not in ADMIN_IDS:
         return
-    if update.message.video:
-        fid = update.message.video.file_id
+    if not ctx.args:
         await update.message.reply_text(
-            f"✅ <b>file_id:</b>\n<code>{fid}</code>",
+            "Format: <code>/addch @username Kanal nomi</code>\n\n"
+            "Misol: <code>/addch @davxtv2 DavxTV 2</code>",
             parse_mode="HTML",
         )
-    elif update.message.document:
-        fid = update.message.document.file_id
-        await update.message.reply_text(
-            f"✅ <b>file_id (document):</b>\n<code>{fid}</code>",
-            parse_mode="HTML",
-        )
+        return
+    username = ctx.args[0]
+    title    = " ".join(ctx.args[1:]) if len(ctx.args) > 1 else username
+    ok = db.add_channel(username, title)
+    if ok:
+        await update.message.reply_text(f"✅ <b>{title}</b> ({username}) qo'shildi!", parse_mode="HTML")
     else:
-        await update.message.reply_text("❌ Video yuboring!")
+        await update.message.reply_text(f"❌ {username} allaqachon mavjud!", parse_mode="HTML")
+
+# ──────────────────────────────────────────
+#  ADMIN /rmch — kanal o'chirish
+# ──────────────────────────────────────────
+async def remove_channel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    if uid not in ADMIN_IDS:
+        return
+    if not ctx.args:
+        await update.message.reply_text("Format: <code>/rmch @username</code>", parse_mode="HTML")
+        return
+    username = ctx.args[0]
+    ok = db.remove_channel(username)
+    if ok:
+        await update.message.reply_text(f"🗑 {username} o'chirildi.", parse_mode="HTML")
+    else:
+        await update.message.reply_text(f"❌ {username} topilmadi.", parse_mode="HTML")
 
 # ──────────────────────────────────────────
 #  MAIN
@@ -587,33 +658,32 @@ async def get_file_id(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # Foydalanuvchi buyruqlari
+    # Foydalanuvchi
     app.add_handler(CommandHandler("start",     start))
     app.add_handler(CommandHandler("help",      help_cmd))
     app.add_handler(CommandHandler("list",      list_cmd))
     app.add_handler(CommandHandler("new",       new_cmd))
     app.add_handler(CommandHandler("lang",      lang_cmd))
 
-    # Admin buyruqlari
+    # Admin
     app.add_handler(CommandHandler("admin",     admin_panel))
     app.add_handler(CommandHandler("add",       add_movie))
     app.add_handler(CommandHandler("del",       del_movie))
     app.add_handler(CommandHandler("stats",     stats_cmd))
     app.add_handler(CommandHandler("broadcast", broadcast))
+    app.add_handler(CommandHandler("addch",     add_channel))
+    app.add_handler(CommandHandler("rmch",      remove_channel))
 
-    # Video/document yuborilganda file_id berish (admin uchun)
-    app.add_handler(MessageHandler(
-        filters.VIDEO | filters.Document.ALL,
-        get_file_id,
-    ))
+    # Video → file_id
+    app.add_handler(MessageHandler(filters.VIDEO | filters.Document.ALL, get_file_id))
 
-    # Callback tugmalar
+    # Callback
     app.add_handler(CallbackQueryHandler(cb))
 
-    # Matn (kino kodi)
+    # Kod
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_code))
 
-    logger.info("🚀 DavxTV Bot v2.0 ishga tushdi!")
+    logger.info("🚀 DavxTV Bot v3.0 ishga tushdi!")
     app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
 
 
