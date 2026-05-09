@@ -5,9 +5,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
 class Database:
-    def __init__(self, db_path="davxtv.db"):
+    def __init__(self, db_path="/app/data/davxtv.db"):
         self.db_path = db_path
         self._init()
 
@@ -23,25 +22,32 @@ class Database:
                     user_id    INTEGER PRIMARY KEY,
                     username   TEXT DEFAULT '',
                     first_name TEXT DEFAULT '',
-                    lang       TEXT DEFAULT 'uz',
+                    lang       TEXT DEFAULT NULL,
                     joined_at  TEXT DEFAULT (datetime('now'))
                 );
 
                 CREATE TABLE IF NOT EXISTS movies (
-                    code           TEXT PRIMARY KEY,
-                    title          TEXT NOT NULL,
-                    category       TEXT NOT NULL,
-                    genre          TEXT DEFAULT '-',
-                    year           TEXT DEFAULT '-',
-                    language       TEXT DEFAULT '-',
-                    file_id        TEXT NOT NULL,
-                    views          INTEGER DEFAULT 0,
-                    added_at       TEXT DEFAULT (datetime('now'))
+                    code      TEXT PRIMARY KEY,
+                    title     TEXT NOT NULL,
+                    category  TEXT NOT NULL,
+                    genre     TEXT DEFAULT '-',
+                    year      TEXT DEFAULT '-',
+                    language  TEXT DEFAULT '-',
+                    file_id   TEXT NOT NULL,
+                    views     INTEGER DEFAULT 0,
+                    added_at  TEXT DEFAULT (datetime('now'))
+                );
+
+                CREATE TABLE IF NOT EXISTS channels (
+                    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username   TEXT NOT NULL UNIQUE,
+                    title      TEXT DEFAULT '',
+                    active     INTEGER DEFAULT 1
                 );
             """)
         logger.info("✅ DB tayyor")
 
-    # ── USERS ──────────────────────────────────────────────────────────────────
+    # ── USERS ──────────────────────────────────────────────────────────────
     def add_user(self, user_id, username="", first_name=""):
         with self._conn() as c:
             c.execute(
@@ -52,7 +58,7 @@ class Database:
     def get_user_lang(self, user_id):
         with self._conn() as c:
             row = c.execute("SELECT lang FROM users WHERE user_id=?", (user_id,)).fetchone()
-            return row["lang"] if row else None   # None = til tanlanmagan
+            return row["lang"] if row else None
 
     def set_user_lang(self, user_id, lang):
         with self._conn() as c:
@@ -62,7 +68,7 @@ class Database:
         with self._conn() as c:
             return [dict(r) for r in c.execute("SELECT * FROM users").fetchall()]
 
-    # ── MOVIES ─────────────────────────────────────────────────────────────────
+    # ── MOVIES ─────────────────────────────────────────────────────────────
     def add_movie(self, code, title, category, genre, year, language, file_id):
         try:
             with self._conn() as c:
@@ -73,7 +79,7 @@ class Database:
                 )
             return True
         except sqlite3.IntegrityError:
-            return False   # kod allaqachon bor
+            return False
 
     def delete_movie(self, code):
         with self._conn() as c:
@@ -116,3 +122,28 @@ class Database:
                 "SELECT code,title,views FROM movies ORDER BY views DESC LIMIT 5"
             ).fetchall()]
         return {"users": users, "movies": movies, "views": views, "top": top}
+
+    # ── CHANNELS ───────────────────────────────────────────────────────────
+    def get_channels(self):
+        with self._conn() as c:
+            return [dict(r) for r in c.execute(
+                "SELECT * FROM channels WHERE active=1"
+            ).fetchall()]
+
+    def add_channel(self, username, title=""):
+        username = username if username.startswith("@") else f"@{username}"
+        try:
+            with self._conn() as c:
+                c.execute(
+                    "INSERT INTO channels (username, title) VALUES (?,?)",
+                    (username, title)
+                )
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+    def remove_channel(self, username):
+        username = username if username.startswith("@") else f"@{username}"
+        with self._conn() as c:
+            cur = c.execute("DELETE FROM channels WHERE username=?", (username,))
+            return cur.rowcount > 0
