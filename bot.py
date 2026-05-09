@@ -526,7 +526,10 @@ def main():
     app.add_handler(CommandHandler("broadcast", broadcast))
 
     app.add_handler(CallbackQueryHandler(callback_handler))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_code))
+    app.add_handler(MessageHandler(
+        (filters.VIDEO | filters.Document.ALL),
+        get_file_id,
+    ))
 
     logger.info("🚀 DavxTV bot ishga tushdi! (O'zbekcha | Русский | English)")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
