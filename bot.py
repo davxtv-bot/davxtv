@@ -256,6 +256,30 @@ async def new_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 # ──────────────────────────────────────────
+#  KANAL TEKSHIRUVI
+# ──────────────────────────────────────────
+CHANNEL = "@davxtv"
+
+async def is_subscribed(uid: int, ctx: ContextTypes.DEFAULT_TYPE) -> bool:
+    try:
+        member = await ctx.bot.get_chat_member(chat_id=CHANNEL, user_id=uid)
+        return member.status in ["member", "administrator", "creator"]
+    except Exception:
+        return False
+
+async def send_sub_msg(update: Update, lang: str):
+    msgs = {
+        "uz": "📢 Kinolarni ko'rish uchun kanalimizga a'zo bo'ling!",
+        "ru": "📢 Подпишитесь на наш канал чтобы смотреть фильмы!",
+        "en": "📢 Subscribe to our channel to watch movies!",
+    }
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📢 Kanalga o'tish", url=f"https://t.me/davxtv")],
+        [InlineKeyboardButton("✅ A'zo bo'ldim", callback_data="check_sub")],
+    ])
+    await update.message.reply_text(msgs.get(lang, msgs["uz"]), reply_markup=kb)
+
+# ──────────────────────────────────────────
 #  KOD YOZILGANDA → FILM
 # ──────────────────────────────────────────
 async def handle_code(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -268,6 +292,11 @@ async def handle_code(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             "🌐 Tilni tanlang / Выберите язык / Choose language:",
             reply_markup=lang_kb(),
         )
+        return
+
+    # Kanal tekshiruvi
+    if not await is_subscribed(uid, ctx):
+        await send_sub_msg(update, lang)
         return
 
     raw   = update.message.text.strip().upper()
@@ -307,6 +336,29 @@ async def cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     data = q.data
     uid  = q.from_user.id
     await q.answer()
+
+    # A'ZO BO'LDIM TUGMASI
+    if data == "check_sub":
+        lang = get_lang(uid) or "uz"
+        if await is_subscribed(uid, ctx):
+            msgs = {
+                "uz": "✅ Rahmat! Endi kino kodini yuboring:",
+                "ru": "✅ Спасибо! Теперь отправьте код фильма:",
+                "en": "✅ Thanks! Now send the movie code:",
+            }
+            await q.message.reply_text(msgs.get(lang, msgs["uz"]), parse_mode="HTML")
+        else:
+            msgs = {
+                "uz": "❌ Siz hali kanalga a'zo bo'lmadingiz!",
+                "ru": "❌ Вы ещё не подписались на канал!",
+                "en": "❌ You haven't subscribed yet!",
+            }
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📢 Kanalga o'tish", url="https://t.me/davxtv")],
+                [InlineKeyboardButton("✅ A'zo bo'ldim", callback_data="check_sub")],
+            ])
+            await q.message.reply_text(msgs.get(lang, msgs["uz"]), reply_markup=kb)
+        return
 
     # TIL TANLASH
     if data.startswith("lang_"):
