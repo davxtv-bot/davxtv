@@ -314,6 +314,13 @@ async def new_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 # ──────────────────────────────────────────
 async def handle_code(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     uid  = update.effective_user.id
+
+    # Admin nom yozayotgan bo'lsa — birinchi tekshir
+    if uid in ADMIN_IDS:
+        handled = await handle_admin_title(update, ctx)
+        if handled:
+            return
+
     lang = get_lang(uid)
 
     if lang is None:
@@ -356,25 +363,126 @@ async def handle_code(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     )
 
 # ──────────────────────────────────────────
-#  VIDEO → FILE_ID (Admin)
+#  AVTOMATIK FORWARD TIZIMI
 # ──────────────────────────────────────────
+
+# Kategoriya aniqlash
+def detect_category(text: str) -> str:
+    text = text.lower()
+    if any(w in text for w in ["o'zbek", "uzbek", "uz", "milliy"]):
+        return "UZ"
+    if any(w in text for w in ["turk", "turkish", "tr", "dizi"]):
+        return "TR"
+    if any(w in text for w in ["hind", "hindi", "indian", "bollywood"]):
+        return "HN"
+    return "XR"
+
+# Keyingi kod generatsiya qilish
+def next_code(category: str) -> str:
+    movies = db.get_by_category(category)
+    if not movies:
+        return f"{category}001"
+    nums = []
+    for m in movies:
+        try:
+            nums.append(int(m["code"][2:]))
+        except:
+            pass
+    nxt = max(nums) + 1 if nums else 1
+    return f"{category}{nxt:03d}"
+
 async def get_file_id(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     if uid not in ADMIN_IDS:
         return
-    if update.message.video:
-        fid = update.message.video.file_id
-    elif update.message.document:
-        fid = update.message.document.file_id
+
+    msg = update.message
+    if msg.video:
+        fid = msg.video.file_id
+    elif msg.document and msg.document.mime_type and "video" in msg.document.mime_type:
+        fid = msg.document.file_id
     else:
-        await update.message.reply_text("❌ Video yuboring!")
         return
-    await update.message.reply_text(
-        f"✅ <b>file_id:</b>\n<code>{fid}</code>\n\n"
-        f"📝 Kino qo'shish:\n"
-        f"<code>/add KOD | Nomi | UZ | Janr | Yil | Til | {fid}</code>",
+
+    # Caption dan kino nomini olish
+    caption = msg.caption or ""
+    if not caption and msg.forward_from_chat:
+        caption = msg.forward_from_chat.title or ""
+
+    # Kino nomini caption dan tozalash
+    import re
+    title_guess = re.sub(r"[\U0001F000-\U0001FFFF]|[@#]\S+|\d{4}|HD|4K|UHD|\|.*", "", caption)
+    title_guess = " ".join(title_guess.split()).strip()[:50]
+
+    # Saqlab qo'yish (keyingi xabarda nom kelguncha)
+    ctx.user_data["pending_video"] = {
+        "file_id":     fid,
+        "title_guess": title_guess,
+        "category":    detect_category(caption),
+    }
+
+    # Nomni so'rash
+    guess_text = f"\n\n💡 Taxminan: <b>{title_guess}</b>\nTo'g'ri bo'lsa — shuni yuboring." if title_guess else ""
+    await msg.reply_text(
+        f"🎬 Video qabul qilindi!\n"
+        f"📝 <b>Kino nomini yozing:</b>{guess_text}",
         parse_mode="HTML",
     )
+
+async def handle_admin_title(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Admin kino nomini yozganda — avtomatik saqlaydi va kanalga yuboradi"""
+    uid = update.effective_user.id
+    if uid not in ADMIN_IDS:
+        return False
+    if "pending_video" not in ctx.user_data:
+        return False
+
+    title    = update.message.text.strip()
+    pending  = ctx.user_data.pop("pending_video")
+    file_id  = pending["file_id"]
+    category = detect_category(title) if detect_category(title) != "XR" else pending["category"]
+    code     = next_code(category)
+
+    # Turlar
+    cat_names = {"UZ": "🇺🇿 O'zbek", "TR": "🇹🇷 Turk", "HN": "🇮🇳 Hind", "XR": "🌍 Xorij"}
+
+    # Bazaga saqlash
+    db.add_movie(code, title, category, "-", "-", "-", file_id)
+
+    # Admin ga xabar
+    await update.message.reply_text(
+        f"✅ <b>Saqlandi!</b>\n\n"
+        f"🎬 {title}\n"
+        f"🔑 Kod: <code>{code}</code>\n"
+        f"📁 Tur: {cat_names[category]}\n\n"
+        f"📢 Kanalga yuborilmoqda...",
+        parse_mode="HTML",
+    )
+
+    # Kanalga post tashlash
+    channels = db.get_channels()
+    post_text = (
+        f"🎬 <b>{title}</b>\n\n"
+        f"📁 {cat_names[category]}\n"
+        f"🔑 Kod: <code>{code}</code>\n\n"
+        f"👇 Botda to'liq ko'rish uchun kodni yuboring:"
+    )
+
+    import asyncio
+    for ch in channels:
+        try:
+            # Kanalga video + post
+            await update.message.bot.send_video(
+                chat_id=ch["username"],
+                video=file_id,
+                caption=post_text,
+                parse_mode="HTML",
+            )
+            await asyncio.sleep(1)
+        except Exception as e:
+            logger.error(f"Kanal xato: {e}")
+
+    return True
 
 # ──────────────────────────────────────────
 #  CALLBACK
